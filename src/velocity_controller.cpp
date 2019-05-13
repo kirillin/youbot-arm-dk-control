@@ -1,7 +1,29 @@
 #include <velocity_controller.h>
 
+template <class MatT>
+Matrix<typename MatT::Scalar, MatT::ColsAtCompileTime, MatT::RowsAtCompileTime>
+pseudoinverse(const MatT &mat, typename MatT::Scalar tolerance = typename MatT::Scalar{1e-4}) // choose appropriately
+{
+  typedef typename MatT::Scalar Scalar;
+  auto svd = mat.jacobiSvd(ComputeFullU | ComputeFullV);
+  const auto &singularValues = svd.singularValues();
+  Matrix<Scalar, MatT::ColsAtCompileTime, MatT::RowsAtCompileTime> singularValuesInv(mat.cols(), mat.rows());
+  singularValuesInv.setZero();
+  for (unsigned int i = 0; i < singularValues.size(); ++i) {
+    if (singularValues(i) > tolerance)
+    {
+      singularValuesInv(i, i) = Scalar{1} / singularValues(i);
+    }
+    else
+    {
+      singularValuesInv(i, i) = Scalar{0};
+    }
+  }
+  return svd.matrixV() * singularValuesInv * svd.matrixU().adjoint();
+}
 
-VelocityController::VelocityController(Kinematics _ks): ks(_ks) {
+VelocityController::VelocityController(Kinematics _ks, double _kp, double _kd, double _ki): 
+    ks(_ks), kp(_kp), kd(_kd), ki(_ki) {
   ROS_INFO("Velocity controller initialisation.");
   arm_position_pub = nh.advertise<brics_actuator::JointPositions>("arm_controller/position_command", 1); /*arm_1/arm_controller/position_command*/
   arm_velocity_pub = nh.advertise<brics_actuator::JointVelocities>("arm_controller/velocity_command", 1);
@@ -17,9 +39,11 @@ VelocityController::VelocityController(Kinematics _ks): ks(_ks) {
 
   s_d <<  0.20795853,  0.20675547,  0.0219284, -3.122599784479932, -0.5165184041578356, 0.31116222223650225;
 
+//s_d << 0.2744692,0.36735819,0.35123038,-1.2365040279536323, -1.4439848811907705, -0.9734717097933285;
+
     //    xyz: [ 0.23795853  0.08675547  0.13219284] qtn: [ 0.95473937  0.15220461  0.25087902 -0.04864365]
 //    rpy: (-3.122599784479932, -0.5165184041578356, 0.31116222223650225)
-  dq0 << 0, 0, 0, 0, 0;
+  dq0 << 0, 0, 0, 0, 0, 0;
 
   /* coefs for controller */
   K << 1, 0, 0, 0, 0, 0,
@@ -28,6 +52,13 @@ VelocityController::VelocityController(Kinematics _ks): ks(_ks) {
        0, 0, 0, 1, 0, 0,
        0, 0, 0, 0, 1, 0,
        0, 0, 0, 0, 0, 1;
+
+       
+counter = 0;
+ei << 0, 0, 0, 0, 0, 0;
+ed << 0, 0, 0, 0, 0, 0;
+last_e << 0, 0, 0, 0, 0, 0;
+
 }
 
 VelocityController::~VelocityController(){
@@ -56,54 +87,46 @@ void VelocityController::js_callback(const sensor_msgs::JointState &msg){
   for (int i = 0; i < NUMBER_OF_JOINTS; i++) {
     q(i) = msg.position[i];
   }
-
-  /* feedback cartesian vector 's'*/
   Vector6d s = ks.forward(q);
-  /* error*/
   Vector6d error = -0.5 * K * (s_d - s);
+  Vector6d ds = error;// + ds_d;
 
-  out << error.transpose() << endl;
-
-  clog << error.transpose() << " " << msg.header.stamp <<endl;
-
-  Vector6d ds = -1 * ds_d;//error;// + ds_d;
-
-  /* pseudo inverse Jacobi matrix compute */
-  Matrix<double, N, 6> piJ;
-  ks.get_pinv_jacobi_num(q, piJ);
-
-
-//  Matrix<double, 6, N> J;
+  Matrix<double, 6, N> J;
 //  ks.get_jacobi(q, J);
-//  JacobiSVD<MatrixXf> svd(J, ComputeThinU | ComputeThinV);
-//  Matrix<double, N, 6> iJ = svd.matrixV() * svd.singularValues().asDiagonal() * svd.matrixU().transpose();
-//  VectorNd dq = iJ * ds; /* To manipulator pass and vvjjjuhh */
+//  clog << J << endl;
+//  Matrix<double, 5, 6> iJ = pseudoinverse(J);
 
-    VectorNd dq = piJ * ds; /* To manipulator pass and vvjjjuhh */
+  Matrix<double, N, 6> iJ = ks.get_pinv_jacobi_num(q,J);//pseudoinverse(J);
 
+  VectorNd dq = iJ * ds; /* To manipulator pass and vvjjjuhh */
 
-    std::stringstream joint_name;
-  point.resize(NUMBER_OF_JOINTS);
-  for (int i = 0; i < NUMBER_OF_JOINTS /*+2*/; i++) {
-    if (i < 5) { /* link's joints */
-      joint_name.str("");
-      joint_name << "arm_joint_" << (i + 1);
+    if (dq.sum() < 5) {
 
-      point[i].joint_uri = joint_name.str();
-      point[i].value = dq(i);
-      point[i].unit = boost::units::to_string(boost::units::si::radian_per_second);
-    } else {  /* gripper joints */
-      if (i == 5) {
-        point[i].joint_uri = "gripper_finger_joint_l";
-      } else {
-        point[i].joint_uri = "gripper_finger_joint_r";
-      }
-      point[i].value = 0;
-      point[i].unit = boost::units::to_string(boost::units::si::meter_per_second);
-    }
-  };
-  arm_velocities.velocities = point;
-  arm_velocity_pub.publish(arm_velocities);
+        std::stringstream joint_name;
+      point.resize(NUMBER_OF_JOINTS);
+      for (int i = 0; i < NUMBER_OF_JOINTS /*+2*/; i++) {
+        if (i < 5) { /* link's joints */
+          joint_name.str("");
+          joint_name << "arm_joint_" << (i + 1);
+
+          point[i].joint_uri = joint_name.str();
+          point[i].value = dq(i);
+          point[i].unit = boost::units::to_string(boost::units::si::radian_per_second);
+        } else {  /* gripper joints */
+          if (i == 5) {
+            point[i].joint_uri = "gripper_finger_joint_l";
+          } else {
+            point[i].joint_uri = "gripper_finger_joint_r";
+          }
+          point[i].value = 0;
+          point[i].unit = boost::units::to_string(boost::units::si::meter_per_second);
+        }
+      };
+      arm_velocities.velocities = point;
+      arm_velocity_pub.publish(arm_velocities);
+    } else {
+        clog << "STOP! Jacobian is close to singularity! Velocities sre very big!" << endl;
+    }      
 }
 
 
@@ -187,13 +210,19 @@ void VelocityController::work(){
 int main(int argc, char** argv) {
   ros::init(argc, argv, "velocity_controller_node");
 
+  double kp = std::atof(argv[1]);
+  double kd = std::atof(argv[2]);
+  double ki = std::atof(argv[3]);
+
+  std::cout << kp << "\t" << kd << "\t" << ki << std::endl;
+  
   VectorNd v1; v1 << 0.033, 0.155, 0.135, 0.0, 0.0;
   VectorNd v2; v2 << M_PI/2.0, 0.0, 0.0, M_PI/2.0, 0.0;
   VectorNd v3; v3 << 0.147, 0.0, 0.0, 0.0, 0.218;
   VectorNd v4; v4 << M_PI*169.0/180.0, M_PI*65.0/180.0+M_PI/2, -M_PI*146.0/180.0, M_PI*102.5/180.0+M_PI/2, M_PI*167.5/180.0;
   Kinematics ks(v1, v2, v3, v4);
 
-  VelocityController vc(ks);
+  VelocityController vc(ks, kp, kd, ki);
   vc.work();
 
   return 0;

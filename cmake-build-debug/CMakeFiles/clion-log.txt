@@ -1,5 +1,5 @@
 /media/data/programs/clion-2018.3.4/bin/cmake/linux/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/kirix/ros_vs_ws/src/youbot_arm_jacobi_control
-CMake Error at CMakeLists.txt:6 (find_package):
+CMake Error at CMakeLists.txt:8 (find_package):
   By not providing "Findcatkin.cmake" in CMAKE_MODULE_PATH this project has
   asked CMake to find a package configuration file provided by "catkin", but
   CMake did not find one.

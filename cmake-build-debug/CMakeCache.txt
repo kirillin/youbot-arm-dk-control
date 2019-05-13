@@ -217,6 +217,12 @@ ProcessorCount_cmd_getconf:FILEPATH=/usr/bin/getconf
 //Path to a program.
 ProcessorCount_cmd_sysctl:FILEPATH=/sbin/sysctl
 
+//ViSPConfig.cmake path location
+VISP_CONFIG_PATH:PATH=/usr/local/lib/cmake/visp
+
+//The directory containing a CMake configuration file for VISP.
+VISP_DIR:PATH=/usr/local/lib/cmake/visp
+
 //The directory containing a CMake configuration file for catkin.
 catkin_DIR:PATH=catkin_DIR-NOTFOUND
 
@@ -380,4 +386,6 @@ CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 ProcessorCount_cmd_getconf-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: ProcessorCount_cmd_sysctl
 ProcessorCount_cmd_sysctl-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: VISP_CONFIG_PATH
+VISP_CONFIG_PATH-ADVANCED:INTERNAL=1
 

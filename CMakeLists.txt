@@ -13,6 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
   youbot_arm_kinematics
 )
 
+find_package(VISP REQUIRED visp_core visp_robot visp_io visp_gui)
+
+
 #generate_messages(DEPENDENCIES std_msgs)
 catkin_package(CATKIN_DEPENDS youbot_arm_kinematics message_runtime std_msgs)
 
