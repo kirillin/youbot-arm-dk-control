@@ -19,7 +19,7 @@
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
 #include <Eigen/QR>
-#include<Eigen/Eigenvalues>
+#include <Eigen/Eigenvalues>
 
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
@@ -28,8 +28,6 @@
 #include <brics_actuator/JointPositions.h>
 
 #include <youbot_arm_kinematics/kinematics.h>
-#include <visp3/core/vpEigenConversion.h>
-#include <visp3/core/vpMatrix.h>
 
 
 using namespace std;
@@ -50,6 +48,7 @@ class VelocityController {
   /* trajectory point */
   Vector6d s_d;
   Vector6d ds_d;
+  Matrix<double, 1, NUMBER_OF_JOINTS> q_state;
 
   std::ofstream out;
   int counter;
